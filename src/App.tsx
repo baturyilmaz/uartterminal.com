@@ -150,17 +150,18 @@ const App = () => {
             data = new TextEncoder().encode(inputData);
             break;
           case 'hex':
-            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 16)));
+            data = new Uint8Array(
+              inputData.split(/\s+/)
+                .filter(byte => byte !== '')
+                .map(byte => parseInt(byte, 16))
+            );
             break;
-          case 'binary':
-            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 2)));
-            break;
-          case 'decimal':
-            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 10)));
-            break;
-          case 'base64':
-            data = Uint8Array.from(atob(inputData), c => c.charCodeAt(0));
-            break;
+            case 'binary':
+              data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 2)));
+              break;
+            case 'decimal':
+              data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 10)));
+              break;
           default:
             throw new Error('Unsupported send format');
         }
@@ -221,8 +222,6 @@ const App = () => {
         return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 2))).join('');
       case 'decimal':
         return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 10))).join('');
-      case 'base64':
-        return atob(text);
       default:
         return text;
     }
@@ -342,7 +341,6 @@ const App = () => {
               <option value="hex">HEX</option>
               <option value="binary">Binary</option>
               <option value="decimal">Decimal</option>
-              <option value="base64">Base64</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
               <ChevronDown size={16} />
