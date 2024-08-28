@@ -203,15 +203,21 @@ const App = () => {
   };
 
   const saveLog = () => {
-    const logContent = receivedData.map(item => 
-      `${formatTimestamp(item.timestamp)} ${item.type === 'sent' ? 'TX:' : 'RX:'} ${item.text}`
-    ).join('\n');
+    const logContent = receivedData.map(item => {
+      let formattedText;
+      if (displayFormat === 'auto') {
+        formattedText = item.text;
+      } else {
+        formattedText = formatReceivedData(item.text, displayFormat);
+      }
+      return `${formatTimestamp(item.timestamp)} ${item.type === 'sent' ? 'TX:' : 'RX:'} ${formattedText}`;
+    }).join('\n');
 
     const blob = new Blob([logContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'serial_log.txt';
+    link.download = `serial_log_${displayFormat}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -289,7 +295,7 @@ const App = () => {
     <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
       <div className="flex-shrink-0 p-4 border-b dark:border-gray-700">
         <div className="flex justify-between items-center max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold">TermiWeb</h1>
+          <h1 className="text-2xl font-bold">UART Terminal</h1>
           <button onClick={toggleDarkMode} className="p-2 rounded-full">
             {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
           </button>
