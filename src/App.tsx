@@ -50,7 +50,7 @@ const Select = ({ value, onChange, options, label }) => {
 const App = () => {
   const { isDarkMode, toggleDarkMode } = useContext(ThemeContext);
   const [isConnected, setIsConnected] = useState(false);
-  const [receivedData, setReceivedData] = useState('');
+  const [receivedData, setReceivedData] = useState([]);
   const [inputData, setInputData] = useState('');
   const [portInfo, setPortInfo] = useState({ port: null, reader: null, writer: null });
   const [error, setError] = useState('');
@@ -62,6 +62,7 @@ const App = () => {
   });
 
   const outputRef = useRef(null);
+  const bufferRef = useRef('');
 
   useEffect(() => {
     if (outputRef.current) {
@@ -88,6 +89,19 @@ const App = () => {
     }
   };
 
+  const processBuffer = (buffer) => {
+    const lines = buffer.split(/[\r\n]+/);
+    const incompleteLine = lines.pop(); // This might be an incomplete line
+
+    lines.forEach(line => {
+      if (line.trim() !== '') {
+        setReceivedData(prev => [...prev, { type: 'received', text: line, timestamp: new Date() }]);
+      }
+    });
+
+    return incompleteLine;
+  };
+
   const readLoop = async (reader) => {
     try {
       while (true) {
@@ -98,8 +112,8 @@ const App = () => {
         }
         if (value) {
           const text = new TextDecoder().decode(value);
-          setReceivedData(prev => prev + text);
-          console.log(text);
+          bufferRef.current += text;
+          bufferRef.current = processBuffer(bufferRef.current);
         }
       }
     } catch (err) {
@@ -131,7 +145,7 @@ const App = () => {
       try {
         const data = new TextEncoder().encode(inputData);
         await portInfo.writer.write(data);
-        setReceivedData(prev => prev + `Sent: ${inputData}\n`);
+        setReceivedData(prev => [...prev, { type: 'sent', text: inputData, timestamp: new Date() }]);
         setInputData('');
       } catch (err) {
         console.error('Error sending data:', err);
@@ -143,11 +157,16 @@ const App = () => {
   };
 
   const clearData = () => {
-    setReceivedData('');
+    setReceivedData([]);
+    bufferRef.current = '';
   };
 
   const handleOptionChange = (option, value) => {
     setConnectionOptions(prev => ({ ...prev, [option]: value }));
+  };
+
+  const formatTimestamp = (date) => {
+    return date.toLocaleTimeString('en-US', { hour12: false });
   };
 
   return (
@@ -215,7 +234,17 @@ const App = () => {
         </div>
         
         <div ref={outputRef} className="flex-grow overflow-y-auto border rounded p-2 bg-gray-100 dark:bg-gray-800 mb-4">
-          <pre className="whitespace-pre-wrap">{receivedData || 'No data received yet...'}</pre>
+          {receivedData.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">No data received yet...</p>
+          ) : (
+            receivedData.map((item, index) => (
+              <div key={index} className={`mb-1 ${item.type === 'sent' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
+                <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
+                <span className="font-mono">{item.text}</span>
+              </div>
+            ))
+          )}
         </div>
         
         <div className="flex-shrink-0 flex space-x-2">
@@ -223,6 +252,7 @@ const App = () => {
             type="text" 
             value={inputData}
             onChange={(e) => setInputData(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendData()}
             placeholder="Enter data to send..."
             className="flex-grow p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
             disabled={!isConnected}
