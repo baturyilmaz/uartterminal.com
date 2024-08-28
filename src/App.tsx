@@ -61,6 +61,7 @@ const App = () => {
     parity: 'none'
   });
   const [sendFormat, setSendFormat] = useState('ascii');
+  const [displayFormat, setDisplayFormat] = useState('auto');
 
   const outputRef = useRef(null);
   const bufferRef = useRef('');
@@ -156,12 +157,12 @@ const App = () => {
                 .map(byte => parseInt(byte, 16))
             );
             break;
-            case 'binary':
-              data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 2)));
-              break;
-            case 'decimal':
-              data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 10)));
-              break;
+          case 'binary':
+            data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 2)));
+            break;
+          case 'decimal':
+            data = new Uint8Array(inputData.split(/\s+/).map(byte => parseInt(byte, 10)));
+            break;
           default:
             throw new Error('Unsupported send format');
         }
@@ -212,19 +213,44 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
-  const formatSentData = (text, format) => {
+  const formatReceivedData = (data, format) => {
     switch (format) {
-      case 'ascii':
-        return text;
       case 'hex':
-        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
-      case 'binary':
-        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 2))).join('');
+        return data.split('').map(char => char.charCodeAt(0).toString(16).padStart(2, '0')).join(' ');
       case 'decimal':
-        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 10))).join('');
+        return data.split('').map(char => char.charCodeAt(0)).join(' ');
+      case 'binary':
+        return data.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
+      case 'ascii':
       default:
-        return text;
+        return data;
     }
+  };
+
+  const renderReceivedData = (item) => {
+    let formattedText;
+    if (displayFormat === 'auto') {
+      formattedText = item.text;
+    } else {
+      formattedText = formatReceivedData(item.text, displayFormat);
+    }
+
+    return (
+      <div key={item.timestamp.getTime()} className={`mb-1 flex items-center justify-between ${item.type === 'sent' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+        <div>
+          <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
+          <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
+          <span className="font-mono">{formattedText}</span>
+        </div>
+        <button 
+          onClick={() => copyToClipboard(formattedText)}
+          className="p-1 rounded bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600"
+          title="Copy"
+        >
+          <Copy size={16} />
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -298,26 +324,27 @@ const App = () => {
           </div>
         </div>
         
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-lg font-semibold">Received Data</h2>
+          <Select
+            label="Display Format"
+            value={displayFormat}
+            onChange={setDisplayFormat}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'ascii', label: 'ASCII' },
+              { value: 'hex', label: 'Hexadecimal' },
+              { value: 'decimal', label: 'Decimal' },
+              { value: 'binary', label: 'Binary' }
+            ]}
+          />
+        </div>
+        
         <div ref={outputRef} className="flex-grow overflow-y-auto border rounded p-2 bg-gray-100 dark:bg-gray-800 mb-4">
           {receivedData.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No data received yet...</p>
           ) : (
-            receivedData.map((item, index) => (
-              <div key={index} className={`mb-1 flex items-center justify-between ${item.type === 'sent' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                <div>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
-                  <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
-                  <span className="font-mono">{item.type === 'sent' ? `${item.text}` : item.text}</span>
-                </div>
-                <button 
-                  onClick={() => copyToClipboard(item.text)}
-                  className="p-1 rounded bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600"
-                  title="Copy"
-                >
-                  <Copy size={16} />
-                </button>
-              </div>
-            ))
+            receivedData.map(renderReceivedData)
           )}
         </div>
         
