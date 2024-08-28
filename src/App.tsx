@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
-import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download } from 'lucide-react';
+import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download, ChevronDown } from 'lucide-react';
 
 const ThemeContext = createContext({ isDarkMode: false, toggleDarkMode: () => {} });
 
@@ -60,6 +60,7 @@ const App = () => {
     stopBits: 1,
     parity: 'none'
   });
+  const [sendFormat, setSendFormat] = useState('ascii');
 
   const outputRef = useRef(null);
   const bufferRef = useRef('');
@@ -143,9 +144,28 @@ const App = () => {
   const sendData = async () => {
     if (inputData.trim() && portInfo.writer) {
       try {
-        const data = new TextEncoder().encode(inputData);
+        let data;
+        switch (sendFormat) {
+          case 'ascii':
+            data = new TextEncoder().encode(inputData);
+            break;
+          case 'hex':
+            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 16)));
+            break;
+          case 'binary':
+            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 2)));
+            break;
+          case 'decimal':
+            data = new Uint8Array(inputData.split(' ').map(byte => parseInt(byte, 10)));
+            break;
+          case 'base64':
+            data = Uint8Array.from(atob(inputData), c => c.charCodeAt(0));
+            break;
+          default:
+            throw new Error('Unsupported send format');
+        }
         await portInfo.writer.write(data);
-        setReceivedData(prev => [...prev, { type: 'sent', text: inputData, timestamp: new Date() }]);
+        setReceivedData(prev => [...prev, { type: 'sent', text: inputData, timestamp: new Date(), format: sendFormat }]);
         setInputData('');
       } catch (err) {
         console.error('Error sending data:', err);
@@ -189,6 +209,23 @@ const App = () => {
     link.download = 'serial_log.txt';
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const formatSentData = (text, format) => {
+    switch (format) {
+      case 'ascii':
+        return text;
+      case 'hex':
+        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 16))).join('');
+      case 'binary':
+        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 2))).join('');
+      case 'decimal':
+        return text.split(' ').map(byte => String.fromCharCode(parseInt(byte, 10))).join('');
+      case 'base64':
+        return atob(text);
+      default:
+        return text;
+    }
   };
 
   return (
@@ -271,7 +308,7 @@ const App = () => {
                 <div>
                   <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
                   <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
-                  <span className="font-mono">{item.text}</span>
+                  <span className="font-mono">{item.type === 'sent' ? `${item.text}` : item.text}</span>
                 </div>
                 <button 
                   onClick={() => copyToClipboard(item.text)}
@@ -295,6 +332,22 @@ const App = () => {
             className="flex-grow p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
             disabled={!isConnected}
           />
+          <div className="relative">
+            <select
+              value={sendFormat}
+              onChange={(e) => setSendFormat(e.target.value)}
+               className="appearance-none bg-gray-200 border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-full"
+            >
+              <option value="ascii">ASCII</option>
+              <option value="hex">HEX</option>
+              <option value="binary">Binary</option>
+              <option value="decimal">Decimal</option>
+              <option value="base64">Base64</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
+              <ChevronDown size={16} />
+            </div>
+          </div>
           <button 
             onClick={sendData}
             disabled={!isConnected}
