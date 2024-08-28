@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
-import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun } from 'lucide-react';
+import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download } from 'lucide-react';
 
 const ThemeContext = createContext({ isDarkMode: false, toggleDarkMode: () => {} });
 
@@ -169,6 +169,28 @@ const App = () => {
     return date.toLocaleTimeString('en-US', { hour12: false });
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      // You could add a temporary "Copied!" message here if desired
+    }, (err) => {
+      console.error('Could not copy text: ', err);
+    });
+  };
+
+  const saveLog = () => {
+    const logContent = receivedData.map(item => 
+      `${formatTimestamp(item.timestamp)} ${item.type === 'sent' ? 'TX:' : 'RX:'} ${item.text}`
+    ).join('\n');
+
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'serial_log.txt';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
       <div className="flex-shrink-0 p-4 border-b dark:border-gray-700">
@@ -188,6 +210,13 @@ const App = () => {
               className={`p-2 rounded-full ${isConnected ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
             >
               {isConnected ? <StopCircle size={24} color="white" /> : <PlayCircle size={24} color="white" />}
+            </button>
+            <button 
+              onClick={saveLog}
+              className="p-2 rounded bg-blue-500 hover:bg-blue-600"
+              title="Save Log"
+            >
+              <Download size={24} color="white" />
             </button>
           </div>
           
@@ -238,10 +267,19 @@ const App = () => {
             <p className="text-gray-500 dark:text-gray-400">No data received yet...</p>
           ) : (
             receivedData.map((item, index) => (
-              <div key={index} className={`mb-1 ${item.type === 'sent' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
-                <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
-                <span className="font-mono">{item.text}</span>
+              <div key={index} className={`mb-1 flex items-center justify-between ${item.type === 'sent' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                <div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">{formatTimestamp(item.timestamp)}</span>
+                  <span className="font-bold mr-2">{item.type === 'sent' ? 'TX:' : 'RX:'}</span>
+                  <span className="font-mono">{item.text}</span>
+                </div>
+                <button 
+                  onClick={() => copyToClipboard(item.text)}
+                  className="p-1 rounded bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600"
+                  title="Copy"
+                >
+                  <Copy size={16} />
+                </button>
               </div>
             ))
           )}
