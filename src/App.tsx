@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
 import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download, ChevronDown } from 'lucide-react';
 
+// Theme context to manage light and dark mode
 const ThemeContext = createContext({ isDarkMode: false, toggleDarkMode: () => {} });
 
 const ThemeProvider = ({ children }) => {
@@ -28,6 +29,7 @@ const ThemeProvider = ({ children }) => {
   );
 };
 
+// Select component for various terminal options
 const Select = ({ value, onChange, options, label }) => {
   return (
     <div className="flex flex-col">
@@ -62,15 +64,16 @@ const App = () => {
   });
   const [sendFormat, setSendFormat] = useState('ascii');
   const [displayFormat, setDisplayFormat] = useState('auto');
+  const [scrollBehavior, setScrollBehavior] = useState('auto');
 
   const outputRef = useRef(null);
   const bufferRef = useRef('');
 
   useEffect(() => {
-    if (outputRef.current) {
+    if (outputRef.current && scrollBehavior === 'auto') {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [receivedData]);
+  }, [receivedData, scrollBehavior]);
 
   const connectToPort = async () => {
     try {
@@ -93,7 +96,7 @@ const App = () => {
 
   const processBuffer = (buffer) => {
     const lines = buffer.split(/[\r\n]+/);
-    const incompleteLine = lines.pop(); // This might be an incomplete line
+    const incompleteLine = lines.pop();
 
     lines.forEach(line => {
       if (line.trim() !== '') {
@@ -193,7 +196,7 @@ const App = () => {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text).then(() => {
-      // You could add a temporary "Copied!" message here if desired
+      // Optional: Temporary "Copied!" message
     }, (err) => {
       console.error('Could not copy text: ', err);
     });
@@ -253,8 +256,37 @@ const App = () => {
     );
   };
 
+  const handleScroll = () => {
+    if (outputRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = outputRef.current;
+      const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 1;
+      if (!isScrolledToBottom && scrollBehavior === 'auto') {
+        setScrollBehavior('manual');
+      }
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      if (e.shiftKey) {
+        return;
+      }
+      
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const { selectionStart, selectionEnd, value } = e.target;
+        const newValue = value.substring(0, selectionStart) + '\t' + value.substring(selectionEnd);
+        setInputData(newValue);
+        
+        setTimeout(() => {
+          e.target.selectionStart = e.target.selectionEnd = selectionStart + 1;
+        }, 0);
+      }
+    }
+  };
+
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
       <div className="flex-shrink-0 p-4 border-b dark:border-gray-700">
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           <h1 className="text-2xl font-bold">TermiWeb</h1>
@@ -264,8 +296,8 @@ const App = () => {
         </div>
       </div>
 
-      <div className="flex-grow flex flex-col overflow-hidden p-4 max-w-4xl mx-auto w-full">
-        <div className="flex-shrink-0 space-y-4 mb-4">
+      <div className="flex-grow flex flex-col p-4 max-w-4xl mx-auto w-full">
+        <div className="space-y-4 mb-4">
           <div className="flex space-x-4">
             <button 
               onClick={isConnected ? disconnectPort : connectToPort}
@@ -326,21 +358,37 @@ const App = () => {
         
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold">Received Data</h2>
-          <Select
-            label="Display Format"
-            value={displayFormat}
-            onChange={setDisplayFormat}
-            options={[
-              { value: 'auto', label: 'Auto' },
-              { value: 'ascii', label: 'ASCII' },
-              { value: 'hex', label: 'Hexadecimal' },
-              { value: 'decimal', label: 'Decimal' },
-              { value: 'binary', label: 'Binary' }
-            ]}
-          />
+          <div className="flex items-center space-x-2">
+            <Select
+              label="Scroll"
+              value={scrollBehavior}
+              onChange={setScrollBehavior}
+              options={[
+                { value: 'auto', label: 'Auto-scroll' },
+                { value: 'manual', label: 'Manual scroll' }
+              ]}
+            />
+            <Select
+              label="Display Format"
+              value={displayFormat}
+              onChange={setDisplayFormat}
+              options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'ascii', label: 'ASCII' },
+                { value: 'hex', label: 'Hexadecimal' },
+                { value: 'decimal', label: 'Decimal' },
+                { value: 'binary', label: 'Binary' }
+              ]}
+            />
+          </div>
         </div>
         
-        <div ref={outputRef} className="flex-grow overflow-y-auto border rounded p-2 bg-gray-100 dark:bg-gray-800 mb-4">
+        <div 
+          ref={outputRef} 
+          className="flex-grow overflow-y-auto border rounded p-2 bg-gray-100 dark:bg-gray-800 mb-4"
+          style={{ minHeight: '200px', maxHeight: 'calc(100vh - 400px)' }}
+          onScroll={handleScroll}
+        >
           {receivedData.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No data received yet...</p>
           ) : (
@@ -354,7 +402,8 @@ const App = () => {
             value={inputData}
             onChange={(e) => setInputData(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && sendData()}
-            placeholder="Enter data to send..."
+            onKeyDown={handleKeyDown}
+            placeholder="Enter data to send... (Ctrl+Tab to insert tab)"
             className="flex-grow p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
             disabled={!isConnected}
           />
@@ -362,7 +411,7 @@ const App = () => {
             <select
               value={sendFormat}
               onChange={(e) => setSendFormat(e.target.value)}
-               className="appearance-none bg-gray-200 border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-full"
+              className="appearance-none bg-gray-200 border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-full"
             >
               <option value="ascii">ASCII</option>
               <option value="hex">HEX</option>
