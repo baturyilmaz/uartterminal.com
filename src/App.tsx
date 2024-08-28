@@ -129,7 +129,7 @@ const App = () => {
   const sendData = async () => {
     if (inputData.trim() && portInfo.writer) {
       try {
-        const data = new TextEncoder().encode(inputData + '\n');
+        const data = new TextEncoder().encode(inputData);
         await portInfo.writer.write(data);
         setReceivedData(prev => prev + `Sent: ${inputData}\n`);
         setInputData('');
