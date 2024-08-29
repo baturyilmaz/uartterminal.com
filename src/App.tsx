@@ -1,10 +1,56 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, createContext, useContext, ReactNode } from 'react';
 import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download, ChevronDown } from 'lucide-react';
 
-// Theme context to manage light and dark mode
-const ThemeContext = createContext({ isDarkMode: false, toggleDarkMode: () => {} });
+// Declare global navigator.serial
+declare global {
+  interface Navigator {
+    serial: any;
+  }
+}
 
-const ThemeProvider = ({ children }) => {
+// Define types
+type ThemeContextType = {
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+};
+
+type ConnectionOptions = {
+  baudRate: number;
+  dataBits: number;
+  stopBits: number;
+  parity: 'none' | 'even' | 'odd';
+};
+
+// Custom type definition for SerialPort
+interface SerialPort {
+  open: (options: ConnectionOptions) => Promise<void>;
+  close: () => Promise<void>;
+  readable: ReadableStream;
+  writable: WritableStream;
+}
+
+type PortInfo = {
+  port: SerialPort | null;
+  reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  writer: WritableStreamDefaultWriter<Uint8Array> | null;
+};
+
+type ReceivedDataItem = {
+  type: 'sent' | 'received';
+  text: string;
+  timestamp: Date;
+  format?: string;
+};
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+// Theme context
+const ThemeContext = createContext<ThemeContextType>({ isDarkMode: false, toggleDarkMode: () => {} });
+
+const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
@@ -29,14 +75,24 @@ const ThemeProvider = ({ children }) => {
   );
 };
 
-// Select component for various terminal options
-const Select = ({ value, onChange, options, label }) => {
+// Updated Select component with generic type
+const Select = <T extends string>({ 
+  value, 
+  onChange, 
+  options, 
+  label 
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: SelectOption[];
+  label: string;
+}) => {
   return (
     <div className="flex flex-col">
       <label className="mb-1 text-sm font-medium">{label}</label>
       <select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value as T)}
         className="p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
       >
         {options.map((option) => (
@@ -49,24 +105,24 @@ const Select = ({ value, onChange, options, label }) => {
   );
 };
 
-const App = () => {
+const App: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useContext(ThemeContext);
   const [isConnected, setIsConnected] = useState(false);
-  const [receivedData, setReceivedData] = useState([]);
+  const [receivedData, setReceivedData] = useState<ReceivedDataItem[]>([]);
   const [inputData, setInputData] = useState('');
-  const [portInfo, setPortInfo] = useState({ port: null, reader: null, writer: null });
+  const [portInfo, setPortInfo] = useState<PortInfo>({ port: null, reader: null, writer: null });
   const [error, setError] = useState('');
-  const [connectionOptions, setConnectionOptions] = useState({
+  const [connectionOptions, setConnectionOptions] = useState<ConnectionOptions>({
     baudRate: 9600,
     dataBits: 8,
     stopBits: 1,
     parity: 'none'
   });
-  const [sendFormat, setSendFormat] = useState('ascii');
-  const [displayFormat, setDisplayFormat] = useState('auto');
-  const [scrollBehavior, setScrollBehavior] = useState('auto');
+  const [sendFormat, setSendFormat] = useState<'ascii' | 'hex' | 'binary' | 'decimal'>('ascii');
+  const [displayFormat, setDisplayFormat] = useState<'auto' | 'ascii' | 'hex' | 'decimal' | 'binary'>('auto');
+  const [scrollBehavior, setScrollBehavior] = useState<'auto' | 'manual'>('auto');
 
-  const outputRef = useRef(null);
+  const outputRef = useRef<HTMLDivElement>(null);
   const bufferRef = useRef('');
 
   useEffect(() => {
@@ -94,7 +150,7 @@ const App = () => {
     }
   };
 
-  const processBuffer = (buffer) => {
+  const processBuffer = (buffer: string) => {
     const lines = buffer.split(/[\r\n]+/);
     const incompleteLine = lines.pop();
 
@@ -104,10 +160,10 @@ const App = () => {
       }
     });
 
-    return incompleteLine;
+    return incompleteLine || '';
   };
 
-  const readLoop = async (reader) => {
+  const readLoop = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     try {
       while (true) {
         const { value, done } = await reader.read();
@@ -148,7 +204,7 @@ const App = () => {
   const sendData = async () => {
     if (inputData.trim() && portInfo.writer) {
       try {
-        let data;
+        let data: Uint8Array;
         switch (sendFormat) {
           case 'ascii':
             data = new TextEncoder().encode(inputData);
@@ -186,15 +242,15 @@ const App = () => {
     bufferRef.current = '';
   };
 
-  const handleOptionChange = (option, value) => {
+  const handleOptionChange = (option: keyof ConnectionOptions, value: string | number) => {
     setConnectionOptions(prev => ({ ...prev, [option]: value }));
   };
 
-  const formatTimestamp = (date) => {
+  const formatTimestamp = (date: Date) => {
     return date.toLocaleTimeString('en-US', { hour12: false });
   };
 
-  const copyToClipboard = (text) => {
+  const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       // Optional: Temporary "Copied!" message
     }, (err) => {
@@ -222,12 +278,12 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
-  const formatReceivedData = (data, format) => {
+  const formatReceivedData = (data: string, format: string): string => {
     switch (format) {
       case 'hex':
         return data.split('').map(char => char.charCodeAt(0).toString(16).padStart(2, '0')).join(' ');
       case 'decimal':
-        return data.split('').map(char => char.charCodeAt(0)).join(' ');
+        return data.split('').map(char => char.charCodeAt(0).toString()).join(' ');
       case 'binary':
         return data.split('').map(char => char.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
       case 'ascii':
@@ -236,7 +292,7 @@ const App = () => {
     }
   };
 
-  const renderReceivedData = (item) => {
+  const renderReceivedData = (item: ReceivedDataItem) => {
     let formattedText;
     if (displayFormat === 'auto') {
       formattedText = item.text;
@@ -272,7 +328,7 @@ const App = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Tab') {
       if (e.shiftKey) {
         return;
@@ -280,12 +336,13 @@ const App = () => {
       
       if (e.ctrlKey) {
         e.preventDefault();
-        const { selectionStart, selectionEnd, value } = e.target;
-        const newValue = value.substring(0, selectionStart) + '\t' + value.substring(selectionEnd);
+        const target = e.target as HTMLInputElement;
+        const { selectionStart, selectionEnd, value } = target;
+        const newValue = value.substring(0, selectionStart!) + '\t' + value.substring(selectionEnd!);
         setInputData(newValue);
         
         setTimeout(() => {
-          e.target.selectionStart = e.target.selectionEnd = selectionStart + 1;
+          target.selectionStart = target.selectionEnd = selectionStart! + 1;
         }, 0);
       }
     }
@@ -335,25 +392,25 @@ const App = () => {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <Select
+            <Select<string>
               label="Baud Rate"
               value={connectionOptions.baudRate.toString()}
               onChange={(value) => handleOptionChange('baudRate', parseInt(value))}
               options={[300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(rate => ({ value: rate.toString(), label: rate.toString() }))}
             />
-            <Select
+            <Select<string>
               label="Data Bits"
               value={connectionOptions.dataBits.toString()}
               onChange={(value) => handleOptionChange('dataBits', parseInt(value))}
               options={[7, 8].map(bits => ({ value: bits.toString(), label: bits.toString() }))}
             />
-            <Select
+            <Select<string>
               label="Stop Bits"
               value={connectionOptions.stopBits.toString()}
               onChange={(value) => handleOptionChange('stopBits', parseInt(value))}
               options={[1, 2].map(bits => ({ value: bits.toString(), label: bits.toString() }))}
             />
-            <Select
+            <Select<'none' | 'even' | 'odd'>
               label="Parity"
               value={connectionOptions.parity}
               onChange={(value) => handleOptionChange('parity', value)}
@@ -365,7 +422,7 @@ const App = () => {
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold">Received Data</h2>
           <div className="flex items-center space-x-2">
-            <Select
+            <Select<'auto' | 'manual'>
               label="Scroll"
               value={scrollBehavior}
               onChange={setScrollBehavior}
@@ -374,7 +431,7 @@ const App = () => {
                 { value: 'manual', label: 'Manual scroll' }
               ]}
             />
-            <Select
+            <Select<'auto' | 'ascii' | 'hex' | 'decimal' | 'binary'>
               label="Display Format"
               value={displayFormat}
               onChange={setDisplayFormat}
@@ -416,7 +473,7 @@ const App = () => {
           <div className="relative">
             <select
               value={sendFormat}
-              onChange={(e) => setSendFormat(e.target.value)}
+              onChange={(e) => setSendFormat(e.target.value as 'ascii' | 'hex' | 'binary' | 'decimal')}
               className="appearance-none bg-gray-200 border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-full"
             >
               <option value="ascii">ASCII</option>
@@ -447,7 +504,7 @@ const App = () => {
   );
 };
 
-const WrappedApp = () => (
+const WrappedApp: React.FC = () => (
   <ThemeProvider>
     <App />
   </ThemeProvider>
