@@ -5,6 +5,8 @@ My hope is that this will grow into a collaborative project, bringing together d
 You can access UART Terminal by visiting www.uartterminal.com, or if you prefer, you can clone the repository and run it locally.
 I'm open to any and all collaboration - if you've got ideas or want to contribute, I'd really appreciate it!
 
+[![Watch the video](./assets/uartterminal.png)](./assets/uartterminal-video.mp4)
+
 ## Features
 
 - Connect to serial ports with customizable connection options
