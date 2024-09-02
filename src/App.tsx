@@ -250,8 +250,8 @@ const App: React.FC = () => {
             scrollBehavior={scrollBehavior}
             setScrollBehavior={setScrollBehavior}
             handleScroll={handleScroll}
-            renderReceivedData={renderReceivedData}
             outputRef={outputRef}
+            renderReceivedData={renderReceivedData}
           />
           <InputPanel
             inputData={inputData}
