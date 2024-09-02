@@ -1,112 +1,13 @@
-import React, { useState, useRef, useEffect, createContext, useContext, ReactNode } from 'react';
-import { AlertCircle, Send, Trash2, PlayCircle, StopCircle, Moon, Sun, Copy, Download, ChevronDown } from 'lucide-react';
-
-// Declare global navigator.serial
-declare global {
-  interface Navigator {
-    serial: any;
-  }
-}
-
-// Define types
-type ThemeContextType = {
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
-};
-
-type ConnectionOptions = {
-  baudRate: number;
-  dataBits: number;
-  stopBits: number;
-  parity: 'none' | 'even' | 'odd';
-};
-
-// Custom type definition for SerialPort
-interface SerialPort {
-  open: (options: ConnectionOptions) => Promise<void>;
-  close: () => Promise<void>;
-  readable: ReadableStream;
-  writable: WritableStream;
-}
-
-type PortInfo = {
-  port: SerialPort | null;
-  reader: ReadableStreamDefaultReader<Uint8Array> | null;
-  writer: WritableStreamDefaultWriter<Uint8Array> | null;
-};
-
-type ReceivedDataItem = {
-  type: 'sent' | 'received';
-  text: string;
-  timestamp: Date;
-  format?: string;
-};
-
-type SelectOption = {
-  value: string;
-  label: string;
-};
-
-// Theme context
-const ThemeContext = createContext<ThemeContextType>({ isDarkMode: false, toggleDarkMode: () => {} });
-
-const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    if (!isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
-
-  return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-};
-
-// Updated Select component with generic type
-const Select = <T extends string>({ 
-  value, 
-  onChange, 
-  options, 
-  label 
-}: {
-  value: T;
-  onChange: (value: T) => void;
-  options: SelectOption[];
-  label: string;
-}) => {
-  return (
-    <div className="flex flex-col">
-      <label className="mb-1 text-sm font-medium">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-        className="p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-};
+import React, { useState, useRef, useEffect } from 'react';
+import { ThemeProvider } from './contexts/ThemeContext';
+import Header from './components/Header';
+import ConnectionPanel from './components/ConnectionPanel';
+import DataDisplay from './components/DataDisplay';
+import InputPanel from './components/InputPanel';
+import { PortInfo, ReceivedDataItem, ConnectionOptions } from './types';
+import { Copy } from 'lucide-react';
 
 const App: React.FC = () => {
-  const { isDarkMode, toggleDarkMode } = useContext(ThemeContext);
   const [isConnected, setIsConnected] = useState(false);
   const [receivedData, setReceivedData] = useState<ReceivedDataItem[]>([]);
   const [inputData, setInputData] = useState('');
@@ -122,8 +23,8 @@ const App: React.FC = () => {
   const [displayFormat, setDisplayFormat] = useState<'auto' | 'ascii' | 'hex' | 'decimal' | 'binary'>('auto');
   const [scrollBehavior, setScrollBehavior] = useState<'auto' | 'manual'>('auto');
 
-  const outputRef = useRef<HTMLDivElement>(null);
   const bufferRef = useRef('');
+  const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (outputRef.current && scrollBehavior === 'auto') {
@@ -328,186 +229,43 @@ const App: React.FC = () => {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Tab') {
-      if (e.shiftKey) {
-        return;
-      }
-      
-      if (e.ctrlKey) {
-        e.preventDefault();
-        const target = e.target as HTMLInputElement;
-        const { selectionStart, selectionEnd, value } = target;
-        const newValue = value.substring(0, selectionStart!) + '\t' + value.substring(selectionEnd!);
-        setInputData(newValue);
-        
-        setTimeout(() => {
-          target.selectionStart = target.selectionEnd = selectionStart! + 1;
-        }, 0);
-      }
-    }
-  };
-
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
-      <div className="flex-shrink-0 p-4 border-b dark:border-gray-700">
-        <div className="flex justify-between items-center max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold">UART Terminal</h1>
-          <button onClick={toggleDarkMode} className="p-2 rounded-full">
-            {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-grow flex flex-col p-4 max-w-4xl mx-auto w-full">
-        <div className="space-y-4 mb-4">
-          <div className="flex space-x-4">
-            <button 
-              onClick={isConnected ? disconnectPort : connectToPort}
-              className={`p-2 rounded-full ${isConnected ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
-            >
-              {isConnected ? <StopCircle size={24} color="white" /> : <PlayCircle size={24} color="white" />}
-            </button>
-            <button 
-              onClick={saveLog}
-              className="p-2 rounded bg-blue-500 hover:bg-blue-600"
-              title="Save Log"
-            >
-              <Download size={24} color="white" />
-            </button>
-          </div>
-          
-          {error && (
-            <div className="flex items-center space-x-2 text-red-600">
-              <AlertCircle size={20} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {!isConnected && !error && (
-            <div className="flex items-center space-x-2 text-yellow-600">
-              <AlertCircle size={20} />
-              <span>Not connected. Click the connect button to select a port.</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <Select<string>
-              label="Baud Rate"
-              value={connectionOptions.baudRate.toString()}
-              onChange={(value) => handleOptionChange('baudRate', parseInt(value))}
-              options={[300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(rate => ({ value: rate.toString(), label: rate.toString() }))}
-            />
-            <Select<string>
-              label="Data Bits"
-              value={connectionOptions.dataBits.toString()}
-              onChange={(value) => handleOptionChange('dataBits', parseInt(value))}
-              options={[7, 8].map(bits => ({ value: bits.toString(), label: bits.toString() }))}
-            />
-            <Select<string>
-              label="Stop Bits"
-              value={connectionOptions.stopBits.toString()}
-              onChange={(value) => handleOptionChange('stopBits', parseInt(value))}
-              options={[1, 2].map(bits => ({ value: bits.toString(), label: bits.toString() }))}
-            />
-            <Select<'none' | 'even' | 'odd'>
-              label="Parity"
-              value={connectionOptions.parity}
-              onChange={(value) => handleOptionChange('parity', value)}
-              options={['none', 'even', 'odd'].map(parity => ({ value: parity, label: parity }))}
-            />
-          </div>
-        </div>
-        
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold">Received Data</h2>
-          <div className="flex items-center space-x-2">
-            <Select<'auto' | 'manual'>
-              label="Scroll"
-              value={scrollBehavior}
-              onChange={setScrollBehavior}
-              options={[
-                { value: 'auto', label: 'Auto-scroll' },
-                { value: 'manual', label: 'Manual scroll' }
-              ]}
-            />
-            <Select<'auto' | 'ascii' | 'hex' | 'decimal' | 'binary'>
-              label="Display Format"
-              value={displayFormat}
-              onChange={setDisplayFormat}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'ascii', label: 'ASCII' },
-                { value: 'hex', label: 'Hexadecimal' },
-                { value: 'decimal', label: 'Decimal' },
-                { value: 'binary', label: 'Binary' }
-              ]}
-            />
-          </div>
-        </div>
-        
-        <div 
-          ref={outputRef} 
-          className="flex-grow overflow-y-auto border rounded p-2 bg-gray-100 dark:bg-gray-800 mb-4"
-          style={{ minHeight: '200px', maxHeight: 'calc(100vh - 400px)' }}
-          onScroll={handleScroll}
-        >
-          {receivedData.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400">No data received yet...</p>
-          ) : (
-            receivedData.map(renderReceivedData)
-          )}
-        </div>
-        
-        <div className="flex-shrink-0 flex space-x-2">
-          <input 
-            type="text" 
-            value={inputData}
-            onChange={(e) => setInputData(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendData()}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter data to send... (Ctrl+Tab to insert tab)"
-            className="flex-grow p-2 border rounded bg-white dark:bg-gray-700 dark:text-white"
-            disabled={!isConnected}
+    <ThemeProvider>
+      <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
+        <Header />
+        <div className="flex-grow flex flex-col p-4 max-w-4xl mx-auto w-full">
+          <ConnectionPanel
+            isConnected={isConnected}
+            connectToPort={connectToPort}
+            disconnectPort={disconnectPort}
+            saveLog={saveLog}
+            error={error}
+            connectionOptions={connectionOptions}
+            handleOptionChange={handleOptionChange}
           />
-          <div className="relative">
-            <select
-              value={sendFormat}
-              onChange={(e) => setSendFormat(e.target.value as 'ascii' | 'hex' | 'binary' | 'decimal')}
-              className="appearance-none bg-gray-200 border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-full"
-            >
-              <option value="ascii">ASCII</option>
-              <option value="hex">HEX</option>
-              <option value="binary">Binary</option>
-              <option value="decimal">Decimal</option>
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
-              <ChevronDown size={16} />
-            </div>
-          </div>
-          <button 
-            onClick={sendData}
-            disabled={!isConnected}
-            className="p-2 rounded disabled:bg-gray-300 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
-          >
-            <Send size={24} color="white" />
-          </button>
-          <button 
-            onClick={clearData}
-            className="p-2 rounded bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-700"
-          >
-            <Trash2 size={24} color="white" />
-          </button>
+          <DataDisplay
+            receivedData={receivedData}
+            displayFormat={displayFormat}
+            setDisplayFormat={setDisplayFormat}
+            scrollBehavior={scrollBehavior}
+            setScrollBehavior={setScrollBehavior}
+            handleScroll={handleScroll}
+            renderReceivedData={renderReceivedData}
+            outputRef={outputRef}
+          />
+          <InputPanel
+            inputData={inputData}
+            setInputData={setInputData}
+            sendData={sendData}
+            sendFormat={sendFormat}
+            setSendFormat={setSendFormat}
+            isConnected={isConnected}
+            clearData={clearData}
+          />
         </div>
       </div>
-    </div>
+    </ThemeProvider>
   );
 };
 
-const WrappedApp: React.FC = () => (
-  <ThemeProvider>
-    <App />
-  </ThemeProvider>
-);
-
-export default WrappedApp;
+export default App;
